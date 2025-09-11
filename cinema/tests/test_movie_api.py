@@ -9,10 +9,14 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from cinema.models import Movie, MovieSession, CinemaHall, Genre, Actor
+from cinema.models import Movie, MovieSession, CinemaHall, Genre, Actor, Order, Ticket
+from cinema.serializers import TicketSerializer
+from user.models import User
 
 MOVIE_URL = reverse("cinema:movie-list")
 MOVIE_SESSION_URL = reverse("cinema:moviesession-list")
+GENRE_URL = reverse("cinema:genre-list")
+ORDERS_URL = reverse("cinema:order-list")
 
 
 def sample_movie(**params):
@@ -43,9 +47,7 @@ def sample_actor(**params):
 
 
 def sample_movie_session(**params):
-    cinema_hall = CinemaHall.objects.create(
-        name="Blue", rows=20, seats_in_row=20
-    )
+    cinema_hall = CinemaHall.objects.create(name="Blue", rows=20, seats_in_row=20)
 
     defaults = {
         "show_time": "2022-06-02 14:00:00",
@@ -157,3 +159,111 @@ class MovieImageUploadTests(TestCase):
         res = self.client.get(MOVIE_SESSION_URL)
 
         self.assertIn("movie_image", res.data[0].keys())
+
+
+class GenreListTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_superuser(
+            "admin@myproject.com", "password"
+        )
+        self.client.force_authenticate(self.user)
+
+    def test_genre_list_returns_list_of_genres(self):
+        Genre.objects.create(name="aboba")
+        Genre.objects.create(name="pupalupa")
+
+        res = self.client.get(GENRE_URL)
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 2)
+
+
+class MovieSessionFiltersTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_superuser(
+            "admin@myproject.com", "password"
+        )
+        self.client.force_authenticate(self.user)
+        self.movie = sample_movie()
+        self.movie_session = sample_movie_session(movie=self.movie)
+        self.movie_session2 = sample_movie_session(
+            movie=self.movie, show_time="2025-07-09 14:00:00"
+        )
+
+    def test_movie_session_filter_returns_movie_sessions_on_this_day(self):
+        res = self.client.get(MOVIE_SESSION_URL, {"date": "2025-07-09"})
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 1)
+        self.assertEqual(res.data[0]["id"], self.movie_session2.id)
+
+    def test_movie_session_filter_returns_movie_sessions_with_this_movie(self):
+        res = self.client.get(MOVIE_SESSION_URL)
+
+        self.assertEqual(res.data[0]["tickets_available"], 400)
+
+
+class OrderViewSetTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.admin = get_user_model().objects.create_superuser(
+            "admin@myproject.com", "password"
+        )
+        self.user_client = User.objects.create_user(
+            email="user2@test.com", password="pass123"
+        )
+
+        self.movie = sample_movie()
+        self.movie_session = sample_movie_session(movie=self.movie)
+
+        self.order1 = Order.objects.create(user=self.user_client)
+        Ticket.objects.create(
+            order=self.order1, movie_session=self.movie_session, row=1, seat=5
+        )
+
+        self.order2 = Order.objects.create(user=self.admin)
+        Ticket.objects.create(
+            order=self.order2, movie_session=self.movie_session, row=5, seat=15
+        )
+
+    def test_user_sees_only_own_orders(self):
+        self.client.force_authenticate(self.user_client)
+        res = self.client.get(ORDERS_URL)
+        print(Order.objects.all())
+
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res.data), 4)
+        self.assertEqual(res.data["results"][0]["id"], self.order1.id)
+
+
+class TicketValidationTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = get_user_model().objects.create_superuser(
+            "admin@myproject.com", "password"
+        )
+        self.client.force_authenticate(self.user)
+        self.movie = sample_movie()
+        self.movie_session = sample_movie_session(movie=self.movie)
+
+    def test_ticket_created(self):
+        data = {
+            "row": 5,
+            "seat": 10,
+            "movie_session": self.movie_session.id,
+        }
+        serializer = TicketSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_invalid_seat_raises_error(self):
+        data = {
+            "row": 5,
+            "seat": 25,
+            "movie_session": self.movie_session.id,
+        }
+        serializer = TicketSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+        error_text = str(serializer.errors)
+        self.assertIn("seat number must be in available range", error_text)

@@ -2,8 +2,7 @@ from datetime import datetime
 
 from django.db.models import F, Count
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema, OpenApiParameter, \
-    OpenApiExample
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from rest_framework import viewsets, mixins, status
 from rest_framework.authentication import TokenAuthentication
 from rest_framework.decorators import action
@@ -87,25 +86,26 @@ class MovieViewSet(
     @extend_schema(
         parameters=[
             OpenApiParameter(
-                name='title',
-                description='Filter movies by title',
+                name="title",
+                description="Filter movies by title",
                 required=False,
-                type=str),
-            OpenApiParameter(
-                name='genres',
-                description='Filter movies by genres ids',
-                required=False,
-                many=True,
-                type=str
-                    ),
-            OpenApiParameter(
-                name='actors',
-                description='Filter movies by actors ids',
-                required=False,
-                many=True,
-                type=str
+                type=str,
             ),
-                ],
+            OpenApiParameter(
+                name="genres",
+                description="Filter movies by genres ids",
+                required=False,
+                many=True,
+                type=str,
+            ),
+            OpenApiParameter(
+                name="actors",
+                description="Filter movies by actors ids",
+                required=False,
+                many=True,
+                type=str,
+            ),
+        ],
     )
     def list(self, request, *args, **kwargs):
         return super().list(request, *args, **kwargs)
@@ -194,15 +194,16 @@ class MovieSessionViewSet(viewsets.ModelViewSet):
     @extend_schema(
         parameters=[
             OpenApiParameter(
-                name='date',
-                description='Filter movie sessions by date',
+                name="date",
+                description="Filter movie sessions by date",
                 required=False,
-                type=str),
+                type=str,
+            ),
             OpenApiParameter(
-                name='movie',
-                description='Filter movie sessions by movie id',
+                name="movie",
+                description="Filter movie sessions by movie id",
                 required=False,
-                type=str
+                type=str,
             ),
         ],
     )
