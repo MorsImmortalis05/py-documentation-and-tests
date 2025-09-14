@@ -179,30 +179,58 @@ class GenreListTest(TestCase):
         self.assertEqual(len(res.data), 2)
 
 
-class MovieSessionFiltersTest(TestCase):
+class MovieFilterTests(TestCase):
     def setUp(self):
         self.client = APIClient()
         self.user = get_user_model().objects.create_superuser(
             "admin@myproject.com", "password"
         )
         self.client.force_authenticate(self.user)
-        self.movie = sample_movie()
-        self.movie_session = sample_movie_session(movie=self.movie)
-        self.movie_session2 = sample_movie_session(
-            movie=self.movie, show_time="2025-07-09 14:00:00"
+        self.genre1 = sample_genre(name="drama")
+        self.genre2 = sample_genre(name="comedy")
+        self.actor1 = sample_actor(first_name="Clint", last_name="Eastwood")
+        self.actor2 = sample_actor(first_name="Uma", last_name="Thurman")
+
+        self.movie1 = sample_movie()
+        self.movie1.genres.add(self.genre1)
+        self.movie1.actors.add(self.actor1)
+
+        self.movie2 = Movie.objects.create(
+            title="funny movie",
+            description="A very funny film",
+            duration=90
         )
+        self.movie2.genres.add(self.genre2)
+        self.movie2.actors.add(self.actor2)
 
-    def test_movie_session_filter_returns_movie_sessions_on_this_day(self):
-        res = self.client.get(MOVIE_SESSION_URL, {"date": "2025-07-09"})
+        self.movie3 = Movie.objects.create(
+            title="mixed movie",
+            description="has both genres",
+            duration=110
+        )
+        self.movie3.genres.set([self.genre1.id, self.genre2.id])
+        self.movie3.actors.set([self.actor1.id, self.actor2.id])
 
+    def test_filter_by_title(self):
+        res = self.client.get(MOVIE_URL, {"title": "funny"})
         self.assertEqual(res.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(res.data), 1)
-        self.assertEqual(res.data[0]["id"], self.movie_session2.id)
+        returned_titles = [m["title"] for m in res.data]
+        self.assertIn(self.movie2.title, returned_titles)
+        self.assertNotIn(self.movie1.title, returned_titles)
 
-    def test_movie_session_filter_returns_movie_sessions_with_this_movie(self):
-        res = self.client.get(MOVIE_SESSION_URL)
+    def test_filter_by_genres(self):
+        res = self.client.get(MOVIE_URL, {"genres": f"{self.genre1.id}"})
+        returned_ids = [movie["id"] for movie in res.data]
+        self.assertIn(self.movie1.id, returned_ids)
+        self.assertIn(self.movie3.id, returned_ids)
+        self.assertNotIn(self.movie2.id, returned_ids)
 
-        self.assertEqual(res.data[0]["tickets_available"], 400)
+    def test_filter_by_actors(self):
+        res = self.client.get(MOVIE_URL, {"actors": f"{self.actor1.id}"})
+        returned_ids = [actor["id"] for actor in res.data]
+        self.assertIn(self.movie1.id, returned_ids)
+        self.assertIn(self.movie3.id, returned_ids)
+        self.assertNotIn(self.movie2.id, returned_ids)
 
 
 class OrderViewSetTest(TestCase):
